@@ -79,8 +79,8 @@ fn desugar(expr: LogicalExpr) -> LogicalExpr {
             right,
         } => LogicalExpr::Bin {
             op: BinOp::Or,
-            left: Box::new(not(*left)),
-            right,
+            left: Box::new(desugar(not(*left))),
+            right: Box::new(desugar(*right)),
         },
         LogicalExpr::Bin {
             op: BinOp::Equiv,

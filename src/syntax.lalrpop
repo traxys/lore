@@ -1,0 +1,56 @@
+grammar;
+use crate::Term;
+use crate::LogicalExpr;
+use crate::BinOp;
+
+Predicate: LogicalExpr = <name:Name> <args:Parameters> => LogicalExpr::Predicate { name, args };
+ExprMostBinding: LogicalExpr = {
+	Predicate => <>,
+	"!" <p:ExprMostBinding> => LogicalExpr::Not(Box::new(p)),
+	"(" <e:Expr> ")" => e,
+};
+ExprAnd: LogicalExpr = {
+	ExprMostBinding => <>,
+	<a:ExprAnd> "&" <b:ExprMostBinding> => LogicalExpr::Bin{op: BinOp::And, left: Box::new(a), right: Box::new(b)},
+};
+ExprOr: LogicalExpr = {
+	ExprAnd => <>,
+	<a:ExprOr> "|" <b:ExprAnd> => LogicalExpr::Bin{op: BinOp::Or, left: Box::new(a), right: Box::new(b)},
+};
+ExprQuant: LogicalExpr = {
+	ExprOr => <>,
+	"for" <variable:Name> <e:ExprQuant> => LogicalExpr::ForAll{variable, expr: Box::new(e)},
+	"ex" <variable:Name> <e:ExprQuant> => LogicalExpr::Exists{variable, expr: Box::new(e)},
+};
+ExprImp: LogicalExpr = {
+	ExprQuant => <>,
+	<a:ExprImp> "=>" <b:ExprQuant> => LogicalExpr::Bin{op: BinOp::Implic, left: Box::new(a), right: Box::new(b)},
+};
+ExprEquiv: LogicalExpr = {
+	ExprImp => <>,
+	<a:ExprEquiv> "<=>" <b:ExprImp> => LogicalExpr::Bin{op: BinOp::Equiv, left: Box::new(a), right: Box::new(b)},
+};
+pub Expr: LogicalExpr = ExprEquiv => <>;
+
+pub Term: Term = {
+	"$" <name:Name> => Term::Variable{name},
+	<name:Name> <p:(<Parameters>)?> => {
+		Term::Symbol{name, args: p.unwrap_or_else(Vec::new)}
+	}
+};
+
+Comma<T>: Vec<T> = { // (1)
+    <v:(<T> ",")*> <e:T?> => match e { // (2)
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
+Parameters: Vec<Term> = "(" <l:Comma<Term>> ")" => l;
+
+
+Name: String = r"[a-zA-Z_]+" => <>.to_string();

@@ -205,7 +205,8 @@ pub enum Command {
     Sieve(Input),
     Render(Input),
     Desugar(Input),
-    Bind{name: String, command: Box<Command>},
+    Bind { name: String, command: Box<Command> },
+    Not(Input),
 }
 
 impl Command {
@@ -213,21 +214,22 @@ impl Command {
         match self {
             Command::Help => false,
             Command::Exit => false,
-            Command::Bind{..} => false,
+            Command::Bind { .. } => false,
             Command::Sieve(_) => true,
             Command::Render(_) => true,
             Command::Desugar(_) => true,
+            Command::Not(_) => true,
         }
-
     }
-    fn name(&self) -> &'static str{
+    fn name(&self) -> &'static str {
         match self {
             Command::Help => "help",
             Command::Exit => "exit",
-            Command::Bind{..} => "bind",
+            Command::Bind { .. } => "bind",
             Command::Sieve(_) => "sieve",
             Command::Render(_) => "render",
             Command::Desugar(_) => "desugar",
+            Command::Not(_) => "not",
         }
     }
     fn print_usage() {
@@ -243,6 +245,10 @@ impl Command {
         println!(
             "    {} <formula>: transfer all not operators to the litterals",
             Paint::new("sieve").bold()
+        );
+        println!(
+            "    {} <formula>: calulate !formula",
+            Paint::new("not").bold()
         );
         println!(
             "    {} <name> <command>: bind the result of command to name, you can refer to this formula by name in inputs",
@@ -300,15 +306,17 @@ fn main() {
                     Command::Sieve(expr) => {
                         println!("{}", sieve_not_down(resolve_input!(&bindings, expr)))
                     }
-                    Command::Bind{name ,command} => {
+                    Command::Not(expr) => println!("{}", not(resolve_input!(&bindings, expr))),
+                    Command::Bind { name, command } => {
                         if !command.is_bindable() {
                             eprintln!("Command {} is not bindable", command.name());
-                            continue
+                            continue;
                         }
                         let result = match *command {
                             Command::Render(expr) => resolve_input!(&bindings, expr),
                             Command::Sieve(expr) => sieve_not_down(resolve_input!(&bindings, expr)),
                             Command::Desugar(expr) => desugar(resolve_input!(&bindings, expr)),
+                            Command::Not(e) => not(resolve_input!(&bindings, e)),
                             c => unreachable!("tried binding invalid command: {}", c.name()),
                         };
                         println!("{}", result);

@@ -8,6 +8,7 @@ use crate::Input;
 pub Command: Command = {
 	"help" => Command::Help,
 	"exit" => Command::Exit,
+	"not" <Input> => Command::Not(<>),
 	"sieve" <Input> => Command::Sieve(<>),
 	"desugar" <Input> => Command::Desugar(<>),
 	"render" <Input> => Command::Render(<>),

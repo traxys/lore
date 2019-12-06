@@ -4,6 +4,7 @@ use std::collections::HashMap;
 extern crate lalrpop_util;
 
 pub mod expressions;
+pub mod interpret;
 use expressions::{LogicalExpr, Term};
 use yansi::Paint;
 
@@ -117,6 +118,7 @@ fn main() {
         println!("No previous history.");
     }
     let mut bindings: HashMap<String, LogicalExpr> = HashMap::new();
+
     loop {
         let readline = rl.readline(">> ");
         match readline {
@@ -137,7 +139,22 @@ fn main() {
                     Command::Interpret {
                         formula,
                         interpretation,
-                    } => unimplemented!(),
+                    } => {
+                        let py_context = match interpret::Context::new(&interpretation) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                eprintln!("Could not create python context: {:?}", e);
+                                continue;
+                            }
+                        };
+                        match expressions::interpret(
+                            resolve_input!(&bindings, formula),
+                            &py_context,
+                        ) {
+                            Ok(b) => println!("Interpreted as {}", b),
+                            Err(e) => eprintln!("Interpretation failed: {:?}", e),
+                        }
+                    }
                     Command::Var(input) => println!(
                         "{{{}}}",
                         expressions::var(resolve_input!(&bindings, input))

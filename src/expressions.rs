@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use crate::interpret::Context as InterpretContext;
 
 #[derive(Debug, Clone)]
 pub enum Term {
@@ -33,6 +34,24 @@ pub enum LogicalExpr {
         variable: String,
         expr: Box<LogicalExpr>,
     },
+}
+
+pub fn interpret(expr: LogicalExpr, context: &InterpretContext) -> Result<bool, crate::interpret::Error> {
+    match expr {
+        LogicalExpr::Not(expr) => interpret(*expr, context).map(|b| !b),
+        LogicalExpr::Predicate{name, args} => context.interpret_predicate(&name, args),
+        LogicalExpr::Bin{op, left, right} => {
+            let left = interpret(*left, context)?;
+            let right = interpret(*right, context)?;
+            Ok(match op {
+                BinOp::Or => left || right,
+                BinOp::And => left && right,
+                BinOp::Implic => !left || right,
+                BinOp::Equiv => (!left || right) && (left || !right), 
+            })
+        }
+        _ => unimplemented!()
+    }
 }
 
 pub fn term_var(term: Term) -> HashSet<String> {

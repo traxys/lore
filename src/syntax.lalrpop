@@ -14,7 +14,10 @@ pub Command: Command = {
 	"desugar" <Input> => Command::Desugar(<>),
 	"render" <Input> => Command::Render(<>),
 	"bind" <name:Name> <command:Command> => Command::Bind{name, command: Box::new(command)},
-	"interpret" <formula: Input> "with" <interpretation: Filename> => Command::Interpret{<>},
+	"interpret" <formula: Input> "with" <interpretation: Filename> => {
+		let interpretation = format!("{}.py", interpretation.trim_start_matches("#"));
+		Command::Interpret{formula, interpretation}
+	}
 };
 Filename: String = r"#.*" => <>.to_string();
 

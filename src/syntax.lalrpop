@@ -1,19 +1,22 @@
 grammar;
-use crate::Term;
-use crate::LogicalExpr;
-use crate::BinOp;
+use crate::expressions::Term;
+use crate::expressions::LogicalExpr;
+use crate::expressions::BinOp;
 use crate::Command;
 use crate::Input;
 
 pub Command: Command = {
 	"help" => Command::Help,
 	"exit" => Command::Exit,
+	"var" <Input> => Command::Var(<>),
 	"not" <Input> => Command::Not(<>),
 	"sieve" <Input> => Command::Sieve(<>),
 	"desugar" <Input> => Command::Desugar(<>),
 	"render" <Input> => Command::Render(<>),
 	"bind" <name:Name> <command:Command> => Command::Bind{name, command: Box::new(command)},
+	"interpret" <formula: Input> "with" <interpretation: Filename> => Command::Interpret{<>},
 };
+Filename: String = r"#.*" => <>.to_string();
 
 Input: Input = {
 	Name => Input::Binding(<>),

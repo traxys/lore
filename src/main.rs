@@ -3,194 +3,9 @@ use std::collections::HashMap;
 #[macro_use]
 extern crate lalrpop_util;
 
-#[derive(Debug, Clone)]
-pub enum Term {
-    Variable { name: String },
-    Symbol { name: String, args: Vec<Term> },
-}
-#[derive(Debug, Clone)]
-pub enum BinOp {
-    Or,
-    And,
-    Equiv,
-    Implic,
-}
-
-#[derive(Debug, Clone)]
-pub enum LogicalExpr {
-    Predicate {
-        name: String,
-        args: Vec<Term>,
-    },
-    Bin {
-        op: BinOp,
-        left: Box<LogicalExpr>,
-        right: Box<LogicalExpr>,
-    },
-    Not(Box<LogicalExpr>),
-    ForAll {
-        variable: String,
-        expr: Box<LogicalExpr>,
-    },
-    Exists {
-        variable: String,
-        expr: Box<LogicalExpr>,
-    },
-}
-
-fn not(expr: LogicalExpr) -> LogicalExpr {
-    match expr {
-        LogicalExpr::Not(e) => *e,
-        LogicalExpr::Bin {
-            op: BinOp::Or,
-            left,
-            right,
-        } => LogicalExpr::Bin {
-            op: BinOp::And,
-            left: Box::new(not(*left)),
-            right: Box::new(not(*right)),
-        },
-        LogicalExpr::Bin {
-            op: BinOp::And,
-            left,
-            right,
-        } => LogicalExpr::Bin {
-            op: BinOp::Or,
-            left: Box::new(not(*left)),
-            right: Box::new(not(*right)),
-        },
-        LogicalExpr::Bin { op, left, right } => not(desugar(LogicalExpr::Bin { op, left, right })),
-        LogicalExpr::ForAll { variable, expr } => LogicalExpr::Exists {
-            variable,
-            expr: Box::new(not(*expr)),
-        },
-        LogicalExpr::Exists { variable, expr } => LogicalExpr::ForAll {
-            variable,
-            expr: Box::new(not(*expr)),
-        },
-        LogicalExpr::Predicate { name, args } => {
-            LogicalExpr::Not(Box::new(LogicalExpr::Predicate { name, args }))
-        }
-    }
-}
-
-fn desugar(expr: LogicalExpr) -> LogicalExpr {
-    match expr {
-        LogicalExpr::Bin {
-            op: BinOp::Implic,
-            left,
-            right,
-        } => LogicalExpr::Bin {
-            op: BinOp::Or,
-            left: Box::new(desugar(not(*left))),
-            right: Box::new(desugar(*right)),
-        },
-        LogicalExpr::Bin {
-            op: BinOp::Equiv,
-            left,
-            right,
-        } => LogicalExpr::Bin {
-            op: BinOp::And,
-            left: Box::new(desugar(LogicalExpr::Bin {
-                op: BinOp::Implic,
-                left: left.clone(),
-                right: right.clone(),
-            })),
-            right: Box::new(desugar(LogicalExpr::Bin {
-                op: BinOp::Implic,
-                left: right,
-                right: left,
-            })),
-        },
-        e => recursive_apply(e, desugar),
-    }
-}
-
-fn sieve_not_down(expr: LogicalExpr) -> LogicalExpr {
-    match expr {
-        LogicalExpr::Not(e) => not(*e),
-        e => recursive_apply(e, sieve_not_down),
-    }
-}
-
-fn recursive_apply(expr: LogicalExpr, func: impl Fn(LogicalExpr) -> LogicalExpr) -> LogicalExpr {
-    match expr {
-        LogicalExpr::Not(e) => LogicalExpr::Not(Box::new(func(*e))),
-        LogicalExpr::Predicate { name, args } => LogicalExpr::Predicate { name, args },
-        LogicalExpr::Exists { variable, expr } => LogicalExpr::Exists {
-            variable,
-            expr: Box::new(func(*expr)),
-        },
-        LogicalExpr::ForAll { variable, expr } => LogicalExpr::ForAll {
-            variable,
-            expr: Box::new(func(*expr)),
-        },
-        LogicalExpr::Bin { op, left, right } => LogicalExpr::Bin {
-            op,
-            left: Box::new(func(*left)),
-            right: Box::new(func(*right)),
-        },
-    }
-}
-
-use std::fmt;
+pub mod expressions;
+use expressions::{LogicalExpr, Term};
 use yansi::Paint;
-
-impl std::fmt::Display for Term {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Term::Variable { name } => write!(f, "{}", Paint::new(name).underline()),
-            Term::Symbol { name, args } => {
-                write!(f, "{}", name)?;
-                if !args.is_empty() {
-                    write!(f, "(")?;
-                    for e in args.iter().take(args.len() - 1) {
-                        write!(f, "{},", e)?;
-                    }
-                    write!(f, "{})", args.last().unwrap())?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
-impl std::fmt::Display for BinOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BinOp::Implic => write!(f, " => "),
-            BinOp::Equiv => write!(f, " <=> "),
-            BinOp::And => write!(f, "∧"),
-            BinOp::Or => write!(f, " ∨ "),
-        }
-    }
-}
-
-impl std::fmt::Display for LogicalExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LogicalExpr::Bin { op, left, right } => write!(f, "({}{}{})", left, op, right),
-            LogicalExpr::Not(e) => write!(f, "¬{}", e),
-            LogicalExpr::Predicate { name, args } => {
-                write!(f, "{}", Paint::new(name).bold())?;
-                if !args.is_empty() {
-                    write!(f, "(")?;
-                    for e in args.iter().take(args.len() - 1) {
-                        write!(f, "{},", e)?;
-                    }
-                    write!(f, "{})", args.last().unwrap())?;
-                }
-                Ok(())
-            }
-            LogicalExpr::ForAll { variable, expr } => {
-                write!(f, "(∀{} {})", Paint::new(variable).underline(), expr)
-            }
-            LogicalExpr::Exists { variable, expr } => {
-                write!(f, "(∃{} {})", Paint::new(variable).underline(), expr)
-            }
-        }
-    }
-}
 
 lalrpop_mod!(pub syntax);
 
@@ -205,8 +20,16 @@ pub enum Command {
     Sieve(Input),
     Render(Input),
     Desugar(Input),
-    Bind { name: String, command: Box<Command> },
+    Bind {
+        name: String,
+        command: Box<Command>,
+    },
+    Interpret {
+        formula: Input,
+        interpretation: String,
+    },
     Not(Input),
+    Var(Input),
 }
 
 impl Command {
@@ -219,6 +42,8 @@ impl Command {
             Command::Render(_) => true,
             Command::Desugar(_) => true,
             Command::Not(_) => true,
+            Command::Interpret { .. } => false,
+            Command::Var(_) => false,
         }
     }
     fn name(&self) -> &'static str {
@@ -230,6 +55,8 @@ impl Command {
             Command::Render(_) => "render",
             Command::Desugar(_) => "desugar",
             Command::Not(_) => "not",
+            Command::Interpret { .. } => "interpret",
+            Command::Var(_) => "var",
         }
     }
     fn print_usage() {
@@ -254,6 +81,14 @@ impl Command {
             "    {} <name> <command>: bind the result of command to name, you can refer to this formula by name in inputs",
             Paint::new("bind").bold()
         );
+        println!(
+            "    {} <formula> with <filename>: interpret the formula with a python script",
+            Paint::new("interpret").bold()
+        );
+        println!(
+            "    {} <formula>: prints the set of variables in the formula",
+            Paint::new("var").bold()
+        );
         println!("    {}: print this help", Paint::new("help").bold());
         println!("    {}: exit", Paint::new("exit").bold());
     }
@@ -273,6 +108,8 @@ macro_rules! resolve_input {
         }
     };
 }
+
+use joinery::JoinableIterator;
 
 fn main() {
     let mut rl = Editor::<()>::new();
@@ -297,16 +134,30 @@ fn main() {
                     Ok(c) => c,
                 };
                 match command {
+                    Command::Interpret {
+                        formula,
+                        interpretation,
+                    } => unimplemented!(),
+                    Command::Var(input) => println!(
+                        "{{{}}}",
+                        expressions::var(resolve_input!(&bindings, input))
+                            .iter()
+                            .map(|x| Paint::new(x).underline())
+                            .join_with(", ")
+                    ),
                     Command::Help => Command::print_usage(),
                     Command::Exit => break,
                     Command::Desugar(expr) => {
-                        println!("{}", desugar(resolve_input!(&bindings, expr)))
+                        println!("{}", expressions::desugar(resolve_input!(&bindings, expr)))
                     }
                     Command::Render(expr) => println!("{}", resolve_input!(&bindings, expr)),
-                    Command::Sieve(expr) => {
-                        println!("{}", sieve_not_down(resolve_input!(&bindings, expr)))
+                    Command::Sieve(expr) => println!(
+                        "{}",
+                        expressions::sieve_not_down(resolve_input!(&bindings, expr))
+                    ),
+                    Command::Not(expr) => {
+                        println!("{}", expressions::not(resolve_input!(&bindings, expr)))
                     }
-                    Command::Not(expr) => println!("{}", not(resolve_input!(&bindings, expr))),
                     Command::Bind { name, command } => {
                         if !command.is_bindable() {
                             eprintln!("Command {} is not bindable", command.name());
@@ -314,9 +165,13 @@ fn main() {
                         }
                         let result = match *command {
                             Command::Render(expr) => resolve_input!(&bindings, expr),
-                            Command::Sieve(expr) => sieve_not_down(resolve_input!(&bindings, expr)),
-                            Command::Desugar(expr) => desugar(resolve_input!(&bindings, expr)),
-                            Command::Not(e) => not(resolve_input!(&bindings, e)),
+                            Command::Sieve(expr) => {
+                                expressions::sieve_not_down(resolve_input!(&bindings, expr))
+                            }
+                            Command::Desugar(expr) => {
+                                expressions::desugar(resolve_input!(&bindings, expr))
+                            }
+                            Command::Not(e) => expressions::not(resolve_input!(&bindings, e)),
                             c => unreachable!("tried binding invalid command: {}", c.name()),
                         };
                         println!("{}", result);

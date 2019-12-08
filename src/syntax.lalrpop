@@ -10,10 +10,11 @@ pub Command: Command = {
 	"exit" => Command::Exit,
 	"var" <Input> => Command::Var(<>),
 	"not" <Input> => Command::Not(<>),
+	"skol" <Input> => Command::Skol(<>),
 	"sieve" <Input> => Command::Sieve(<>),
 	"desugar" <Input> => Command::Desugar(<>),
 	"render" <Input> => Command::Render(<>),
-	"bind" <name:Name> <command:Command> => Command::Bind{name, command: Box::new(command)},
+	"bind" <name:Name> "to" <command:Command> => Command::Bind{name, command: Box::new(command)},
 	"interpret" <formula: Input> "with" <interpretation: Filename> => {
 		let interpretation = format!("{}.py", interpretation.trim_start_matches("#"));
 		Command::Interpret{formula, interpretation}

@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::interpret::Context as InterpretContext;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub enum Term {
@@ -36,22 +36,109 @@ pub enum LogicalExpr {
     },
 }
 
-pub fn interpret(expr: LogicalExpr, context: &InterpretContext) -> Result<bool, crate::interpret::Error> {
+pub fn interpret(
+    expr: LogicalExpr,
+    context: &InterpretContext,
+) -> Result<bool, crate::interpret::Error> {
     match expr {
         LogicalExpr::Not(expr) => interpret(*expr, context).map(|b| !b),
-        LogicalExpr::Predicate{name, args} => context.interpret_predicate(&name, args),
-        LogicalExpr::Bin{op, left, right} => {
+        LogicalExpr::Predicate { name, args } => context.interpret_predicate(&name, args),
+        LogicalExpr::Bin { op, left, right } => {
             let left = interpret(*left, context)?;
             let right = interpret(*right, context)?;
             Ok(match op {
                 BinOp::Or => left || right,
                 BinOp::And => left && right,
                 BinOp::Implic => !left || right,
-                BinOp::Equiv => (!left || right) && (left || !right), 
+                BinOp::Equiv => (!left || right) && (left || !right),
             })
         }
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
+}
+pub fn substitute_vars(term: Term, substs: &HashMap<String, Term>) -> Term {
+    match term {
+        Term::Variable { name } if substs.contains_key(&name) => substs.get(&name).unwrap().clone(),
+        Term::Variable { name } => Term::Variable { name },
+        Term::Symbol { name, args } => Term::Symbol {
+            name,
+            args: args
+                .into_iter()
+                .map(|arg| substitute_vars(arg, substs))
+                .collect(),
+        },
+    }
+}
+struct Assigner {
+    count: std::rc::Rc<std::cell::RefCell<i64>>,
+}
+impl Assigner {
+    fn new() -> Self {
+        Self {
+            count: std::rc::Rc::new(std::cell::RefCell::new(0)),
+        }
+    }
+    fn get(&self) -> String {
+        let name = format!("_{}", self.count.borrow());
+        *self.count.borrow_mut() += 1;
+        name
+    }
+}
+pub fn skolemnize(expr: LogicalExpr) -> LogicalExpr {
+    descend_with_scope_and_const(expr, HashSet::new(), HashMap::new(), &Assigner::new())
+}
+fn descend_with_scope_and_const(
+    expr: LogicalExpr,
+    mut scope: HashSet<String>,
+    mut substs: HashMap<String, Term>,
+    next: &Assigner,
+) -> LogicalExpr {
+    match expr {
+        LogicalExpr::Not(e) => LogicalExpr::Not(Box::new(descend_with_scope_and_const(
+            *e, scope, substs, next,
+        ))),
+        LogicalExpr::Bin { op, left, right } => LogicalExpr::Bin {
+            op,
+            left: Box::new(descend_with_scope_and_const(
+                *left,
+                scope.clone(),
+                substs.clone(),
+                next,
+            )),
+            right: Box::new(descend_with_scope_and_const(*right, scope, substs, next)),
+        },
+        LogicalExpr::ForAll { variable, expr } => {
+            scope.insert(variable.clone());
+            LogicalExpr::ForAll {
+                variable,
+                expr: Box::new(descend_with_scope_and_const(*expr, scope, substs, next)),
+            }
+        }
+        LogicalExpr::Exists { variable, expr } => {
+            // We are removing this variable that just got shadowed
+            scope.remove(&variable);
+            let name = next.get();
+            substs.insert(variable, transform_exists(name, &scope));
+            descend_with_scope_and_const(*expr, scope, substs, next)
+        }
+        LogicalExpr::Predicate { name, args } => LogicalExpr::Predicate {
+            name,
+            args: args
+                .into_iter()
+                .map(|t| substitute_vars(t, &substs))
+                .collect(),
+        },
+    }
+}
+#[inline]
+fn transform_exists(name: String, scope: &HashSet<String>) -> Term {
+    let args = scope
+        .iter()
+        .map(|var| Term::Variable {
+            name: var.to_owned(),
+        })
+        .collect();
+    Term::Symbol { name, args }
 }
 
 pub fn term_var(term: Term) -> HashSet<String> {

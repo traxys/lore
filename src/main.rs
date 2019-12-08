@@ -31,6 +31,7 @@ pub enum Command {
     },
     Not(Input),
     Var(Input),
+    Skol(Input),
 }
 
 impl Command {
@@ -45,6 +46,7 @@ impl Command {
             Command::Not(_) => true,
             Command::Interpret { .. } => false,
             Command::Var(_) => false,
+            Command::Skol(_) => true,
         }
     }
     fn name(&self) -> &'static str {
@@ -58,6 +60,7 @@ impl Command {
             Command::Not(_) => "not",
             Command::Interpret { .. } => "interpret",
             Command::Var(_) => "var",
+            Command::Skol(_) => "skol",
         }
     }
     fn print_usage() {
@@ -79,16 +82,22 @@ impl Command {
             Paint::new("not").bold()
         );
         println!(
-            "    {} <name> <command>: bind the result of command to name, you can refer to this formula by name in inputs",
-            Paint::new("bind").bold()
+            "    {} <name> {} <command>: bind the result of command to name, you can refer to this formula by name in inputs",
+            Paint::new("bind").bold(),
+            Paint::new("to").bold(),
         );
         println!(
-            "    {} <formula> with <filename>: interpret the formula with a python script",
-            Paint::new("interpret").bold()
+            "    {} <formula> {} <filename>: interpret the formula with a python script",
+            Paint::new("interpret").bold(),
+            Paint::new("with").bold(),
         );
         println!(
             "    {} <formula>: prints the set of variables in the formula",
             Paint::new("var").bold()
+        );
+        println!(
+            "    {} <formula>: skolemnizes the formula",
+            Paint::new("skol").bold()
         );
         println!("    {}: print this help", Paint::new("help").bold());
         println!("    {}: exit", Paint::new("exit").bold());
@@ -175,6 +184,10 @@ fn main() {
                     Command::Not(expr) => {
                         println!("{}", expressions::not(resolve_input!(&bindings, expr)))
                     }
+                    Command::Skol(expr) => println!(
+                        "{}",
+                        expressions::skolemnize(resolve_input!(&bindings, expr))
+                    ),
                     Command::Bind { name, command } => {
                         if !command.is_bindable() {
                             eprintln!("Command {} is not bindable", command.name());
@@ -189,6 +202,9 @@ fn main() {
                                 expressions::desugar(resolve_input!(&bindings, expr))
                             }
                             Command::Not(e) => expressions::not(resolve_input!(&bindings, e)),
+                            Command::Skol(e) => {
+                                expressions::skolemnize(resolve_input!(&bindings, e))
+                            }
                             c => unreachable!("tried binding invalid command: {}", c.name()),
                         };
                         println!("{}", result);

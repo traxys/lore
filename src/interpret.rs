@@ -31,7 +31,11 @@ impl Context {
         py.run(&code, None, None).map_err(Error::PyError)?;
         Ok(Context { gil })
     }
-    pub fn interpret_predicate(&self, name: &str, args: Vec<expressions::Term>) -> Result<bool, Error> {
+    pub fn interpret_predicate(
+        &self,
+        name: &str,
+        args: Vec<expressions::Term>,
+    ) -> Result<bool, Error> {
         let mut py_args = Vec::with_capacity(args.len());
         for arg in args {
             py_args.push(self.interpret_term(arg)?);
@@ -47,12 +51,11 @@ impl Context {
             Ok(i) => Ok(i.extract().map_err(Error::CouldNotExtract)?),
             Err(e) => Err(Error::PyError(e)),
         }
-        
     }
     fn interpret_term(&self, term: expressions::Term) -> Result<PyObject, Error> {
         match term {
-            expressions::Term::Variable{name} => Err(Error::VariableInTerm(name)),
-            expressions::Term::Symbol{name, args} => {
+            expressions::Term::Variable { name } => Err(Error::VariableInTerm(name)),
+            expressions::Term::Symbol { name, args } => {
                 if args.is_empty() {
                     self.get_constant(&name)
                 } else {
